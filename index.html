@@ -54,7 +54,7 @@ const chips=document.getElementById('chips');
 NAMES.forEach((n,i)=>{ const s=document.createElement('span'); s.innerHTML=`<b>${i}</b>${ICONS[i]}`; s.title=n; chips.appendChild(s); });
 
 const MOBILE=/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)||Math.min(innerWidth,innerHeight)<600;
-const N=MOBILE?6000:12000, rnd=Math.random, TAU=Math.PI*2;
+const N=MOBILE?4000:12000, rnd=Math.random, TAU=Math.PI*2;
 let NA=N, W,H,DPR, textCache={};
 function resize(){ DPR=Math.min(devicePixelRatio||1,MOBILE?1:1.5); W=innerWidth; H=innerHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); textCache={}; applyMode(); }
 addEventListener('resize',resize);
@@ -161,12 +161,13 @@ const hintEl=document.getElementById('hint'), TOUCH=matchMedia('(pointer:coarse)
 new MutationObserver(()=>{ hintEl.textContent=statusEl.textContent+(TOUCH?' · المس الشاشة لتبديل الشكل':''); }).observe(statusEl,{childList:true,characterData:true,subtree:true});
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+const MINNA=MOBILE?2200:3500;
 let fpsT=performance.now(), fpsN=0, lowCnt=0;
 function frame(){
   const now=performance.now();
   fpsN++; const fdt=now-fpsT;
   if(fdt>1000){ const fps=fpsN*1000/fdt; fpsT=now; fpsN=0;
-    if(fdt>1600){ lowCnt=0; } else if(fps<42&&NA>3500){ if(++lowCnt>=2){ lowCnt=0; NA=Math.max(3500,(NA*0.75)|0); applyMode(); } } else lowCnt=0; }
+    if(fdt>1600){ lowCnt=0; } else if(fps<42&&NA>MINNA){ if(++lowCnt>=2){ lowCnt=0; NA=Math.max(MINNA,(NA*0.75)|0); applyMode(); } } else lowCnt=0; }
   const handOn = now-lastSeen<1200;
   // text/sphere follow the hand; the photo stays centred
   let tx=0, ty=0;
@@ -234,14 +235,14 @@ async function startHands(){
     const aspect=video.videoWidth/video.videoHeight;
     let last=-1, lastDet=0;
     const loop=()=>{
-      if(video.currentTime!==last && performance.now()-lastDet>50){ last=video.currentTime; lastDet=performance.now();
+      if(video.currentTime!==last && performance.now()-lastDet>(MOBILE?150:50)){ last=video.currentTime; lastDet=performance.now();
         let res; try{ res=hl.detectForVideo(video,performance.now()); }catch(e){ statusEl.textContent='خطأ في التتبع: '+(e.message||e); requestAnimationFrame(loop); return; }
         lctx.clearRect(0,0,lm.width,lm.height);
         if(res.landmarks&&res.landmarks.length){
           const L=res.landmarks[0]; lastSeen=performance.now();
           const n=countFingers(L,aspect);
           if(n===cand) stable++; else { cand=n; stable=0; }
-          if(stable>=3) setMode(n);
+          if(stable>=(MOBILE?2:3)) setMode(n);
           handX=1-L[9].x; handY=L[9].y;
           lctx.fillStyle='#ff8014'; for(const q of L){ lctx.beginPath(); lctx.arc(q.x*lm.width,q.y*lm.height,4,0,7); lctx.fill(); }
           statusEl.textContent = n===0 ? 'قبضة ✊ — حرّك يدك يميناً ويساراً لتحريك الكرة'
