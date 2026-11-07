@@ -25,7 +25,7 @@
   #cam{position:fixed;left:18px;bottom:18px;width:220px;aspect-ratio:4/3;border-radius:12px;overflow:hidden;border:1px solid rgba(30,170,235,.4);background:#000}
   #cam video,#cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
   #panel.show{display:block}
-  #hint{position:fixed;left:0;right:0;top:calc(14px + env(safe-area-inset-top,0px));text-align:center;font-size:13px;color:var(--dim);pointer-events:none;padding:0 12px}
+  #hint{position:fixed;left:0;right:0;top:calc(14px + env(safe-area-inset-top,0px));text-align:center;font-size:13px;color:var(--dim);pointer-events:none;padding:0 12px;display:none}
 </style>
 </head>
 <body>
@@ -54,7 +54,8 @@ const chips=document.getElementById('chips');
 NAMES.forEach((n,i)=>{ const s=document.createElement('span'); s.innerHTML=`<b>${i}</b>${ICONS[i]}`; s.title=n; chips.appendChild(s); });
 
 const MOBILE=/Android|iPhone|iPad|Mobi/i.test(navigator.userAgent)||Math.min(innerWidth,innerHeight)<600;
-const N=MOBILE?4000:12000, rnd=Math.random, TAU=Math.PI*2;
+const WANT_GPU=!MOBILE||/[?&]gpu=1/.test(location.search);
+const N=MOBILE?3000:12000, rnd=Math.random, TAU=Math.PI*2;
 let NA=N, W,H,DPR, textCache={};
 function resize(){ DPR=Math.min(devicePixelRatio||1,MOBILE?1:1.5); W=innerWidth; H=innerHeight; cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); textCache={}; applyMode(); }
 addEventListener('resize',resize);
@@ -156,12 +157,11 @@ addEventListener('keydown',e=>{
   if(e.key==='ArrowUp') kbY-=0.08; if(e.key==='ArrowDown') kbY+=0.08;
   kbX=Math.max(-.45,Math.min(.45,kbX)); kbY=Math.max(-.4,Math.min(.4,kbY));
 });
-cv.addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') setMode((mode+1)%6); });
 const hintEl=document.getElementById('hint'), TOUCH=matchMedia('(pointer:coarse)').matches;
-new MutationObserver(()=>{ hintEl.textContent=statusEl.textContent+(TOUCH?' · المس الشاشة لتبديل الشكل':''); }).observe(statusEl,{childList:true,characterData:true,subtree:true});
+new MutationObserver(()=>{ hintEl.textContent=statusEl.textContent; }).observe(statusEl,{childList:true,characterData:true,subtree:true});
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const MINNA=MOBILE?2200:3500;
+const MINNA=MOBILE?1800:3500;
 let fpsT=performance.now(), fpsN=0, lowCnt=0;
 function frame(){
   const now=performance.now();
@@ -227,7 +227,7 @@ async function startHands(){
     const fs=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
     statusEl.textContent='جارٍ تحميل نموذج تتبع اليد…';
     const mkHL=del=>HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:del},runningMode:'VIDEO',numHands:1});
-    let hl; try{ hl=await mkHL(MOBILE?'CPU':'GPU'); }catch(e){ console.warn('delegate fallback',e); hl=await mkHL('CPU'); }
+    let hl; try{ hl=await mkHL(WANT_GPU?'GPU':'CPU'); }catch(e){ console.warn('delegate fallback',e); hl=await mkHL('CPU'); }
     const stream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'}});
     video.srcObject=stream; await video.play();
     lm.width=video.videoWidth; lm.height=video.videoHeight;
@@ -235,7 +235,7 @@ async function startHands(){
     const aspect=video.videoWidth/video.videoHeight;
     let last=-1, lastDet=0;
     const loop=()=>{
-      if(video.currentTime!==last && performance.now()-lastDet>(MOBILE?150:50)){ last=video.currentTime; lastDet=performance.now();
+      if(video.currentTime!==last && performance.now()-lastDet>(WANT_GPU?50:200)){ last=video.currentTime; lastDet=performance.now();
         let res; try{ res=hl.detectForVideo(video,performance.now()); }catch(e){ statusEl.textContent='خطأ في التتبع: '+(e.message||e); requestAnimationFrame(loop); return; }
         lctx.clearRect(0,0,lm.width,lm.height);
         if(res.landmarks&&res.landmarks.length){
@@ -254,7 +254,7 @@ async function startHands(){
     loop();
   }catch(err){
     console.error(err);
-    statusEl.textContent='تعذر تشغيل الكاميرا أو تتبع اليد ('+(err.name||err.message)+'). اسمح بالكاميرا، أو استخدم الأرقام 0–5 والأسهم، أو المس الشاشة لتبديل الشكل.';
+    statusEl.textContent='تعذر تشغيل الكاميرا أو تتبع اليد ('+(err.name||err.message)+'). اسمح بالكاميرا، أو استخدم الأرقام 0–5 والأسهم';
   }
 }
 
