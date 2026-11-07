@@ -25,10 +25,12 @@
   #cam{position:fixed;left:18px;bottom:18px;width:220px;aspect-ratio:4/3;border-radius:12px;overflow:hidden;border:1px solid rgba(30,170,235,.4);background:#000}
   #cam video,#cam canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
   #panel.show{display:block}
+  #hint{position:fixed;left:0;right:0;top:calc(14px + env(safe-area-inset-top,0px));text-align:center;font-size:13px;color:var(--dim);pointer-events:none;padding:0 12px}
 </style>
 </head>
 <body>
 <canvas id="stage"></canvas>
+<div id="hint"></div>
 
 <div id="panel">
   <div id="shapeName">الكرة</div>
@@ -155,6 +157,8 @@ addEventListener('keydown',e=>{
   kbX=Math.max(-.45,Math.min(.45,kbX)); kbY=Math.max(-.4,Math.min(.4,kbY));
 });
 cv.addEventListener('pointerdown',e=>{ if(e.pointerType==='touch') setMode((mode+1)%6); });
+const hintEl=document.getElementById('hint'), TOUCH=matchMedia('(pointer:coarse)').matches;
+new MutationObserver(()=>{ hintEl.textContent=statusEl.textContent+(TOUCH?' · المس الشاشة لتبديل الشكل':''); }).observe(statusEl,{childList:true,characterData:true,subtree:true});
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 let fpsT=performance.now(), fpsN=0, lowCnt=0;
@@ -220,7 +224,9 @@ async function startHands(){
   try{
     const {HandLandmarker,FilesetResolver}=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
     const fs=await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
-    const hl=await HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:'GPU'},runningMode:'VIDEO',numHands:1});
+    statusEl.textContent='جارٍ تحميل نموذج تتبع اليد…';
+    const mkHL=del=>HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',delegate:del},runningMode:'VIDEO',numHands:1});
+    let hl; try{ hl=await mkHL(MOBILE?'CPU':'GPU'); }catch(e){ console.warn('delegate fallback',e); hl=await mkHL('CPU'); }
     const stream=await navigator.mediaDevices.getUserMedia({video:{width:320,height:240,facingMode:'user'}});
     video.srcObject=stream; await video.play();
     lm.width=video.videoWidth; lm.height=video.videoHeight;
@@ -229,7 +235,7 @@ async function startHands(){
     let last=-1, lastDet=0;
     const loop=()=>{
       if(video.currentTime!==last && performance.now()-lastDet>50){ last=video.currentTime; lastDet=performance.now();
-        const res=hl.detectForVideo(video,performance.now());
+        let res; try{ res=hl.detectForVideo(video,performance.now()); }catch(e){ statusEl.textContent='خطأ في التتبع: '+(e.message||e); requestAnimationFrame(loop); return; }
         lctx.clearRect(0,0,lm.width,lm.height);
         if(res.landmarks&&res.landmarks.length){
           const L=res.landmarks[0]; lastSeen=performance.now();
